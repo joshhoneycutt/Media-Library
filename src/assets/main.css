@@ -1,0 +1,39 @@
+:root {
+  --bg: #0d0d0d;
+  --surface: #1a1a1a;
+  --surface-2: #242424;
+  --accent: #e50914;
+  --accent-hover: #ff1a27;
+  --text: #ffffff;
+  --text-2: #aaaaaa;
+  --text-3: #666666;
+  --badge-4k: #f5c518;
+  --badge-4k-text: #000000;
+  --badge-bluray: #5b8db8;
+  --badge-bluray-text: #ffffff;
+  --badge-dvd: #e87b35;
+  --badge-dvd-text: #ffffff;
+  --badge-special: #2ecc9a;
+  --badge-special-text: #000000;
+  --radius: 6px;
+  --radius-lg: 12px;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  min-height: 100vh;
+}
+
+a { color: inherit; text-decoration: none; }
+button { cursor: pointer; font: inherit; }
+img { display: block; max-width: 100%; }
+
+.sr-only {
+  position: absolute; width: 1px; height: 1px;
+  padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0,0,0,0); border: 0;
+}
