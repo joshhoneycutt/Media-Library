@@ -162,14 +162,12 @@ const displayMovies = computed(() => {
 
 .grid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
   gap: 1rem;
   padding: 1.5rem;
 }
 
 .list { padding: 0 1.5rem; }
 
-@media (max-width: 1100px) { .grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
-@media (max-width: 800px)  { .grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-@media (max-width: 500px)  { .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 600px) { .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 </style>

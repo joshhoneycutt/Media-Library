@@ -13,11 +13,27 @@
       </div>
     </nav>
 
+    <div v-if="theme === 'blockbuster'" class="popcorn-bg" aria-hidden="true"></div>
+
     <router-view />
 
     <div v-if="showSettings" class="settings-overlay" @click.self="showSettings = false">
       <aside class="settings-panel">
         <h2>Settings</h2>
+
+        <section>
+          <h3>Theme</h3>
+          <div class="theme-options">
+            <button
+              v-for="t in themes"
+              :key="t.id"
+              class="theme-btn"
+              :class="{ active: theme === t.id }"
+              :data-theme-preview="t.id"
+              @click="setTheme(t.id)"
+            >{{ t.label }}</button>
+          </div>
+        </section>
 
         <section>
           <h3>TMDB API Key</h3>
@@ -62,7 +78,19 @@ const tmdb = useTmdbStore()
 const showSettings = ref(false)
 const newKey = ref('')
 
+const themes = [
+  { id: 'red', label: 'Red' },
+  { id: 'blockbuster', label: 'Blockbuster' },
+]
+const theme = ref(localStorage.getItem('theme') || 'red')
+function setTheme(id) {
+  theme.value = id
+  localStorage.setItem('theme', id)
+  document.documentElement.setAttribute('data-theme', id)
+}
+
 onMounted(async () => {
+  document.documentElement.setAttribute('data-theme', theme.value)
   await tmdb.init()
   await collection.loadCollection()
 })
@@ -90,7 +118,7 @@ function enrichAll() { tmdb.enrichAll(collection.movies) }
 .nav {
   display: flex; align-items: center; gap: 1rem;
   padding: 0 1.5rem; height: 56px;
-  background: #111; border-bottom: 1px solid #222;
+  background: var(--nav-bg); border-bottom: 1px solid var(--nav-border);
   position: sticky; top: 0; z-index: 100;
 }
 .nav-logo {
@@ -145,4 +173,24 @@ function enrichAll() { tmdb.enrichAll(collection.movies) }
 .settings-panel button.danger:hover { background: #444; }
 .settings-panel progress { width: 100%; margin-bottom: 0.5rem; }
 .settings-panel span { font-size: 0.85rem; color: var(--text-2); margin-right: 1rem; }
+
+.popcorn-bg {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Ctext x='10' y='60' font-size='36' opacity='0.07' transform='rotate(-10 10 60)'%3E%F0%9F%8D%BF%3C/text%3E%3Ctext x='130' y='40' font-size='28' opacity='0.05' transform='rotate(15 130 40)'%3E%F0%9F%8D%BF%3C/text%3E%3Ctext x='70' y='150' font-size='32' opacity='0.06' transform='rotate(5 70 150)'%3E%F0%9F%8D%BF%3C/text%3E%3Ctext x='170' y='170' font-size='24' opacity='0.07' transform='rotate(-20 170 170)'%3E%F0%9F%8D%BF%3C/text%3E%3Ctext x='30' y='220' font-size='20' opacity='0.05' transform='rotate(12 30 220)'%3E%F0%9F%8D%BF%3C/text%3E%3Ctext x='180' y='110' font-size='30' opacity='0.04' transform='rotate(-5 180 110)'%3E%F0%9F%8D%BF%3C/text%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 240px 240px;
+}
+
+.theme-options { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.theme-btn {
+  padding: 0.4rem 1rem; border-radius: var(--radius);
+  font-size: 0.85rem; font-weight: 600; border: 2px solid var(--text-3);
+  background: var(--surface-2) !important; color: var(--text-2) !important;
+  transition: border-color 0.15s, color 0.15s;
+}
+.theme-btn:hover { border-color: var(--text-2); color: var(--text) !important; }
+.theme-btn.active { border-color: var(--accent); color: var(--text) !important; }
 </style>

@@ -11,7 +11,8 @@
     "test:run": "vitest run",
     "fetch-tmdb": "node scripts/fetch-tmdb.mjs",
     "update-sheet": "node scripts/update-sheet-runtime.mjs",
-    "fetch-awards": "node scripts/fetch-awards.mjs"
+    "fetch-awards": "node scripts/fetch-awards.mjs",
+    "api": "node scripts/api-server.mjs"
   },
   "dependencies": {
     "pinia": "^2.1.7",

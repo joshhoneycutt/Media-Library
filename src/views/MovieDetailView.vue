@@ -73,6 +73,27 @@
           <CollectionRail :collectionId="movie.collectionId" :currentId="movie.id" />
         </section>
 
+        <section class="your-review">
+          <h2>Your Review</h2>
+          <div class="review-rating-row">
+            <StarRating v-model="localRating" :showValue="true" />
+            <span v-if="localRating === 0" class="no-rating">No rating</span>
+          </div>
+          <textarea
+            v-model="localReview"
+            class="review-textarea"
+            placeholder="Write your thoughts…"
+            rows="4"
+          ></textarea>
+          <div class="review-actions">
+            <button class="save-btn" @click="saveReview" :disabled="saving">
+              {{ saving ? 'Saving…' : 'Save to Sheet' }}
+            </button>
+            <span v-if="saveStatus === 'saved'" class="save-status ok">Saved ✓</span>
+            <span v-if="saveStatus === 'error'" class="save-status err">{{ saveError }}</span>
+          </div>
+        </section>
+
         <section class="your-copy">
           <h2>Your Copy</h2>
           <div class="copy-row">
@@ -124,6 +145,8 @@ import { useTmdbStore } from '@/stores/tmdb.js'
 import FormatBadge from '@/components/FormatBadge.vue'
 import OverrideModal from '@/components/OverrideModal.vue'
 import CollectionRail from '@/components/CollectionRail.vue'
+import StarRating from '@/components/StarRating.vue'
+import { getReview, saveReviewLocally, syncReviewToSheet } from '@/services/review.js'
 
 const route = useRoute()
 const collection = useCollectionStore()
@@ -132,6 +155,37 @@ const tmdb = useTmdbStore()
 const enriching = ref(false)
 const awardsExpanded = ref(false)
 const showOverrideModal = ref(false)
+
+const localRating = ref(0)
+const localReview = ref('')
+const saving = ref(false)
+const saveStatus = ref('')
+const saveError = ref('')
+
+function loadReview(id) {
+  const r = getReview(id)
+  localRating.value = r.rating
+  localReview.value = r.review
+  saveStatus.value = ''
+}
+
+async function saveReview() {
+  const id = route.params.id
+  const data = { rating: localRating.value, review: localReview.value }
+  saveReviewLocally(id, data)
+  saving.value = true
+  saveStatus.value = ''
+  saveError.value = ''
+  try {
+    await syncReviewToSheet(id, movie.value?.title ?? id, data)
+    saveStatus.value = 'saved'
+  } catch (e) {
+    saveStatus.value = 'error'
+    saveError.value = e.message
+  } finally {
+    saving.value = false
+  }
+}
 
 const movie = computed(() => collection.expandedMovies.find(m => m.id === route.params.id))
 const collectionSiblings = computed(() => {
@@ -172,7 +226,8 @@ async function enrich() {
   enriching.value = false
 }
 
-watch(() => route.params.id, async () => {
+watch(() => route.params.id, async (id) => {
+  if (id) loadReview(id)
   if (!movie.value || !tmdb.hasApiKey) return
   if (movie.value.tmdbId && !tmdbData.value) {
     enriching.value = true
@@ -231,6 +286,31 @@ watch(() => route.params.id, async () => {
   letter-spacing: 1.5px; color: var(--text-3); margin-bottom: 0.5rem;
 }
 .sections section p { color: var(--text-2); line-height: 1.7; }
+
+.your-review { display: flex; flex-direction: column; gap: 0.75rem; }
+.review-rating-row { display: flex; align-items: center; gap: 0.75rem; }
+.no-rating { font-size: 0.85rem; color: var(--text-3); }
+.review-textarea {
+  width: 100%; padding: 0.65rem 0.75rem;
+  background: var(--surface-2); border: 1px solid var(--text-3);
+  border-radius: var(--radius); color: var(--text);
+  font: inherit; font-size: 0.9rem; line-height: 1.6;
+  resize: vertical; min-height: 90px;
+  transition: border-color 0.15s;
+}
+.review-textarea:focus { outline: none; border-color: var(--accent); }
+.review-actions { display: flex; align-items: center; gap: 1rem; }
+.save-btn {
+  background: var(--accent); color: #fff; border: none;
+  padding: 0.45rem 1.1rem; border-radius: var(--radius);
+  font-size: 0.875rem; font-weight: 600;
+  transition: background 0.15s;
+}
+.save-btn:hover:not(:disabled) { background: var(--accent-hover); }
+.save-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.save-status { font-size: 0.85rem; }
+.save-status.ok  { color: #2ecc9a; }
+.save-status.err { color: #e74c3c; }
 
 .your-copy { display: flex; flex-direction: column; gap: 0.6rem; }
 .copy-row { display: flex; align-items: center; gap: 1rem; }
