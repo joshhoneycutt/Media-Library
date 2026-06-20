@@ -7,6 +7,8 @@
   --text: #ffffff;
   --text-2: #aaaaaa;
   --text-3: #666666;
+  --nav-bg: #111;
+  --nav-border: #222;
   --badge-4k: #f5c518;
   --badge-4k-text: #000000;
   --badge-bluray: #5b8db8;
@@ -17,6 +19,35 @@
   --badge-special-text: #000000;
   --radius: 6px;
   --radius-lg: 12px;
+}
+
+html[data-theme="red"] {
+  --accent: #e50914;
+  --accent-hover: #ff1a27;
+  --nav-border: #222;
+}
+
+html[data-theme="blockbuster"] {
+  --bg: #0a1628;
+  --surface: #0f2040;
+  --surface-2: #152a52;
+  --accent: #ffe000;
+  --accent-hover: #ffd000;
+  --text: #ffffff;
+  --text-2: #a0b4cc;
+  --text-3: #4a6080;
+  --nav-bg: #061020;
+  --nav-border: #ffe000;
+  --badge-4k: #ffe000;
+  --badge-4k-text: #0a1628;
+  --badge-bluray: #3a7bd5;
+  --badge-bluray-text: #ffffff;
+  --badge-dvd: #e87b35;
+  --badge-dvd-text: #ffffff;
+  --badge-special: #2ecc9a;
+  --badge-special-text: #000000;
+  --radius: 4px;
+  --radius-lg: 8px;
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }

@@ -7,7 +7,15 @@ import http from 'http'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = resolve(__dirname, '..')
 
-const SHEET_ID        = '10KfDZ5TpC34NemewyW9x6W9RKgp8L3qKVdnTA6eCbbs'
+const ENV_PATH = resolve(ROOT, '.env.local')
+if (existsSync(ENV_PATH)) {
+  for (const line of readFileSync(ENV_PATH, 'utf8').split('\n')) {
+    const [key, ...rest] = line.split('=')
+    if (key && rest.length) process.env[key.trim()] = rest.join('=').trim()
+  }
+}
+const SHEET_ID = process.env.GOOGLE_SHEET_ID
+if (!SHEET_ID) { console.error('GOOGLE_SHEET_ID is not set in .env.local'); process.exit(1) }
 const SCOPES          = ['https://www.googleapis.com/auth/spreadsheets']
 const CREDENTIALS_PATH = resolve(ROOT, 'google-credentials.json')
 const TOKEN_PATH       = resolve(ROOT, 'google-token.json')
