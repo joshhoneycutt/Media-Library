@@ -29,3 +29,4 @@ google-token.json
 *.njsproj
 *.sln
 *.sw?
+docs/
