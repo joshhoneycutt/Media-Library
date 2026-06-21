@@ -4,8 +4,10 @@
       <router-link to="/" class="nav-logo">THE LIBRARY</router-link>
       <div class="nav-tabs">
         <router-link to="/" class="nav-tab active-tab">Movies</router-link>
+        <span class="nav-tab disabled">TV Shows</span>
+        <span class="nav-tab disabled">Books</span>
         <span class="nav-tab disabled">Games</span>
-        <span class="nav-tab disabled">More</span>
+        <span class="nav-tab disabled">Music</span>
       </div>
       <div class="nav-actions">
         <button class="icon-btn" title="Sync collection" @click="sync" :class="{ spinning: collection.loading }">⟳</button>
@@ -60,8 +62,7 @@
 
         <section>
           <h3>Cache</h3>
-          <button class="danger" @click="clearTmdbCache">Clear TMDB Cache</button>
-          <button class="danger" style="margin-top:0.5rem" @click="clearCollections">Clear Collections Cache</button>
+          <button class="danger" @click="clearCollections">Clear Collections Cache</button>
         </section>
       </aside>
     </div>
@@ -93,6 +94,9 @@ onMounted(async () => {
   document.documentElement.setAttribute('data-theme', theme.value)
   await tmdb.init()
   await collection.loadCollection()
+  // Backfill missing fields for any un-enriched entries, then sync everything to sheet
+  await tmdb.patchAllMissing()
+  tmdb.syncAllToSheet()
 })
 
 const lastSyncedLabel = computed(() => {

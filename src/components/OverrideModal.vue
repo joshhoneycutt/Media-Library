@@ -35,10 +35,7 @@
 
       <div v-if="applying" class="state-msg">Applying…</div>
       <div v-if="applyError" class="state-msg error">{{ applyError }}</div>
-
-      <div v-if="tmdb.hasOverrides" class="modal-footer">
-        <button class="export-btn" @click="tmdb.exportOverrides()">Export overrides.json</button>
-      </div>
+      <div v-if="applied" class="state-msg">Match saved ✓</div>
     </div>
   </div>
 </template>
@@ -61,6 +58,7 @@ const searched = ref(false)
 const searchError = ref('')
 const applying = ref(false)
 const applyError = ref('')
+const applied = ref(false)
 let debounceTimer = null
 
 onUnmounted(() => clearTimeout(debounceTimer))
@@ -90,7 +88,8 @@ async function pick(result) {
   applyError.value = ''
   try {
     await tmdb.applyOverride(props.movie.id, result.id)
-    emit('close')
+    applied.value = true
+    setTimeout(() => emit('close'), 800)
   } catch (e) {
     applyError.value = `Failed to apply: ${e.message}`
   } finally {
@@ -154,14 +153,4 @@ doSearch()
 }
 .result-title { font-size: 0.9rem; color: var(--text); }
 .result-meta { font-size: 0.75rem; color: var(--text-3); margin-top: 2px; }
-.modal-footer {
-  padding: 0.75rem 1.25rem;
-  border-top: 1px solid var(--surface-2);
-}
-.export-btn {
-  background: none; border: 1px solid var(--text-3);
-  color: var(--text-2); border-radius: var(--radius);
-  padding: 0.4rem 0.75rem; font-size: 0.8rem;
-}
-.export-btn:hover { border-color: var(--text-2); color: var(--text); }
 </style>

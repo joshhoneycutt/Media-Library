@@ -17,6 +17,7 @@ const displayBadges = computed(() => {
   if (props.formats.includes('4K')) badges.push({ label: '4K', type: 'badge-4k' })
   if (props.formats.includes('Blu-ray')) badges.push({ label: 'Blu-ray', type: 'badge-bluray' })
   if (props.formats.includes('DVD')) badges.push({ label: 'DVD', type: 'badge-dvd' })
+  if (props.formats.includes('Digital')) badges.push({ label: 'Digital', type: 'badge-digital' })
   const special = props.notes.find(n => n && n.trim())
   if (special) badges.push({ label: special, type: 'badge-special' })
   return badges
@@ -33,5 +34,6 @@ const displayBadges = computed(() => {
 .badge-4k { background: var(--badge-4k); color: var(--badge-4k-text); }
 .badge-bluray { background: var(--badge-bluray); color: var(--badge-bluray-text); }
 .badge-dvd { background: var(--badge-dvd); color: var(--badge-dvd-text); }
+.badge-digital { background: var(--badge-digital); color: var(--badge-digital-text); }
 .badge-special { background: var(--badge-special); color: var(--badge-special-text); }
 </style>

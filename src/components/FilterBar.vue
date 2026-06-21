@@ -8,7 +8,7 @@
 
       <div class="format-buttons">
         <button
-          v-for="fmt in ['All', '4K', 'Blu-ray', 'DVD']"
+          v-for="fmt in ['All', '4K', 'Blu-ray', 'DVD', 'Digital']"
           :key="fmt"
           :class="['fmt-btn', { active: (localFormat === '' && fmt === 'All') || localFormat === fmt }]"
           @click="setFormat(fmt)"

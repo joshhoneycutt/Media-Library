@@ -3,6 +3,7 @@ import { readFileSync, writeFileSync, existsSync } from 'fs'
 import { resolve, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import http from 'http'
+import { Readable } from 'stream'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = resolve(__dirname, '..')
@@ -146,6 +147,143 @@ async function writeReviewToSheet(sheets, sheetTitle, movieId, rating, review) {
   return found
 }
 
+const OVERRIDES_PATH = resolve(ROOT, 'public', 'tmdb-overrides.json')
+const OVERRIDES_SHEET = 'TMDB Overrides'
+const TMDB_DATA_SHEET = 'TMDB Data'
+
+const TMDB_DATA_HEADERS = [
+  'Slug', 'Title', 'Year', 'Runtime', 'TMDB_Rating', 'Vote_Count',
+  'Tagline', 'Genres', 'Original_Title', 'IMDB_ID', 'Budget', 'Revenue',
+  'Director', 'Writers', 'Producers', 'Cast', 'Languages', 'Countries', 'Studios',
+  'Poster_URL', 'Backdrop_URL', 'TMDB_ID', 'Enriched_At'
+]
+
+async function ensureTmdbDataSheet(sheets) {
+  const meta = await sheets.spreadsheets.get({ spreadsheetId: SHEET_ID })
+  const exists = meta.data.sheets.some(s => s.properties.title === TMDB_DATA_SHEET)
+  if (!exists) {
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId: SHEET_ID,
+      resource: { requests: [{ addSheet: { properties: { title: TMDB_DATA_SHEET } } }] }
+    })
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: SHEET_ID,
+      range: `'${TMDB_DATA_SHEET}'!A1`,
+      valueInputOption: 'RAW',
+      resource: { values: [TMDB_DATA_HEADERS] }
+    })
+  }
+}
+
+async function handleTmdbData(body) {
+  const { movieId, title, data } = body
+  if (!movieId || !data) throw new Error('movieId and data required')
+
+  const auth = getAuth()
+  const sheets = google.sheets({ version: 'v4', auth })
+  await ensureTmdbDataSheet(sheets)
+
+  const row = [
+    movieId,
+    title || '',
+    data.year || '',
+    data.runtime || '',
+    data.voteAverage || '',
+    data.voteCount || '',
+    data.tagline || '',
+    (data.genres || []).join(', '),
+    data.originalTitle || '',
+    data.imdbId || '',
+    data.budget || '',
+    data.revenue || '',
+    data.director || '',
+    (data.writers || []).join(', '),
+    (data.producers || []).join(', '),
+    (data.cast || []).join(', '),
+    (data.languages || []).join(', '),
+    (data.productionCountries || []).join(', '),
+    (data.productionCompanies || []).join(', '),
+    data.posterPath ? `=IMAGE("${data.posterPath}")` : '',
+    data.backdropPath ? `=IMAGE("${data.backdropPath}")` : '',
+    data.tmdbId || '',
+    data.enrichedAt ? new Date(data.enrichedAt).toISOString() : '',
+  ]
+
+  // Find existing row for this slug or append
+  const { data: sheetData } = await sheets.spreadsheets.values.get({
+    spreadsheetId: SHEET_ID,
+    range: `'${TMDB_DATA_SHEET}'!A:A`,
+  })
+  const slugs = (sheetData.values || []).map(r => r[0])
+  let rowNum = slugs.indexOf(movieId)
+  rowNum = rowNum > 0 ? rowNum + 1 : slugs.length + 1
+
+  const endCol = colLetter(TMDB_DATA_HEADERS.length - 1)
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: SHEET_ID,
+    range: `'${TMDB_DATA_SHEET}'!A${rowNum}:${endCol}${rowNum}`,
+    valueInputOption: 'USER_ENTERED',
+    resource: { values: [row] }
+  })
+
+  return { ok: true, movieId }
+}
+
+async function ensureOverridesSheet(sheets) {
+  const meta = await sheets.spreadsheets.get({ spreadsheetId: SHEET_ID })
+  const exists = meta.data.sheets.some(s => s.properties.title === OVERRIDES_SHEET)
+  if (!exists) {
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId: SHEET_ID,
+      resource: { requests: [{ addSheet: { properties: { title: OVERRIDES_SHEET } } }] }
+    })
+    // Write header row
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: SHEET_ID,
+      range: `'${OVERRIDES_SHEET}'!A1:B1`,
+      valueInputOption: 'RAW',
+      resource: { values: [['Slug', 'TMDB_ID']] }
+    })
+  }
+}
+
+async function handleOverride(body) {
+  const { movieId, tmdbId } = body
+  if (!movieId || !tmdbId) throw new Error('movieId and tmdbId required')
+
+  // Update public/tmdb-overrides.json
+  let current = {}
+  try { current = JSON.parse(readFileSync(OVERRIDES_PATH, 'utf8')) } catch {}
+  current[movieId] = tmdbId
+  writeFileSync(OVERRIDES_PATH, JSON.stringify(current, null, 2))
+
+  // Sync to Google Sheet
+  const auth = getAuth()
+  const sheets = google.sheets({ version: 'v4', auth })
+  await ensureOverridesSheet(sheets)
+
+  // Read existing rows to find or append
+  const { data } = await sheets.spreadsheets.values.get({
+    spreadsheetId: SHEET_ID,
+    range: `'${OVERRIDES_SHEET}'!A:B`,
+  })
+  const rows = data.values || []
+  let rowNum = null
+  for (let i = 1; i < rows.length; i++) {
+    if (rows[i][0] === movieId) { rowNum = i + 1; break }
+  }
+  if (!rowNum) rowNum = rows.length + 1
+
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: SHEET_ID,
+    range: `'${OVERRIDES_SHEET}'!A${rowNum}:B${rowNum}`,
+    valueInputOption: 'RAW',
+    resource: { values: [[movieId, tmdbId]] }
+  })
+
+  return { ok: true, movieId, tmdbId }
+}
+
 async function handleReview(body) {
   const { movieId, title, rating, review } = body
   if (!movieId) throw new Error('movieId required')
@@ -173,6 +311,42 @@ async function main() {
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
 
     if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return }
+
+    if (req.method === 'POST' && req.url === '/api/override') {
+      let body = ''
+      req.on('data', c => body += c)
+      req.on('end', async () => {
+        try {
+          const data = JSON.parse(body)
+          const result = await handleOverride(data)
+          res.writeHead(200, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify(result))
+        } catch (e) {
+          console.error('[api-server]', e.message)
+          res.writeHead(500, { 'Content-Type': 'text/plain' })
+          res.end(e.message)
+        }
+      })
+      return
+    }
+
+    if (req.method === 'POST' && req.url === '/api/tmdb-data') {
+      let body = ''
+      req.on('data', c => body += c)
+      req.on('end', async () => {
+        try {
+          const data = JSON.parse(body)
+          const result = await handleTmdbData(data)
+          res.writeHead(200, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify(result))
+        } catch (e) {
+          console.error('[api-server]', e.message)
+          res.writeHead(500, { 'Content-Type': 'text/plain' })
+          res.end(e.message)
+        }
+      })
+      return
+    }
 
     if (req.method === 'POST' && req.url === '/api/review') {
       let body = ''
