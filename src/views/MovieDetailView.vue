@@ -52,19 +52,66 @@
           </div>
         </section>
 
-        <section v-if="tmdbData?.runtime || tmdbData?.director || tmdbData?.cast?.length" class="details-grid">
+        <section v-if="tmdbData" class="details-grid">
           <h2>Details</h2>
-          <div v-if="tmdbData?.runtime" class="copy-row">
+          <div v-if="tmdbData.tagline" class="copy-row tagline-row">
+            <span class="tagline-text">{{ tmdbData.tagline }}</span>
+          </div>
+          <div v-if="tmdbData.originalTitle" class="copy-row">
+            <span class="copy-label">Original Title</span>
+            <span>{{ tmdbData.originalTitle }}</span>
+          </div>
+          <div v-if="tmdbData.genres?.length" class="copy-row">
+            <span class="copy-label">Genres</span>
+            <span>{{ tmdbData.genres.join(', ') }}</span>
+          </div>
+          <div v-if="tmdbData.runtime" class="copy-row">
             <span class="copy-label">Runtime</span>
             <span>{{ formatRuntime(tmdbData.runtime) }}</span>
           </div>
-          <div v-if="tmdbData?.director" class="copy-row">
+          <div v-if="tmdbData.voteAverage" class="copy-row">
+            <span class="copy-label">TMDB Rating</span>
+            <span>★ {{ tmdbData.voteAverage.toFixed(1) }}{{ tmdbData.voteCount ? ` (${tmdbData.voteCount.toLocaleString()} votes)` : '' }}</span>
+          </div>
+          <div v-if="tmdbData.director" class="copy-row">
             <span class="copy-label">Director</span>
             <span>{{ tmdbData.director }}</span>
           </div>
-          <div v-if="tmdbData?.cast?.length" class="copy-row">
+          <div v-if="tmdbData.writers?.length" class="copy-row">
+            <span class="copy-label">Writers</span>
+            <span>{{ tmdbData.writers.join(', ') }}</span>
+          </div>
+          <div v-if="tmdbData.producers?.length" class="copy-row">
+            <span class="copy-label">Producers</span>
+            <span>{{ tmdbData.producers.join(', ') }}</span>
+          </div>
+          <div v-if="tmdbData.cast?.length" class="copy-row">
             <span class="copy-label">Cast</span>
             <span>{{ tmdbData.cast.join(', ') }}</span>
+          </div>
+          <div v-if="tmdbData.languages?.length" class="copy-row">
+            <span class="copy-label">Language</span>
+            <span>{{ tmdbData.languages.join(', ') }}</span>
+          </div>
+          <div v-if="tmdbData.productionCountries?.length" class="copy-row">
+            <span class="copy-label">Countries</span>
+            <span>{{ tmdbData.productionCountries.join(', ') }}</span>
+          </div>
+          <div v-if="tmdbData.productionCompanies?.length" class="copy-row">
+            <span class="copy-label">Studios</span>
+            <span>{{ tmdbData.productionCompanies.join(', ') }}</span>
+          </div>
+          <div v-if="tmdbData.budget" class="copy-row">
+            <span class="copy-label">Budget</span>
+            <span>{{ formatMoney(tmdbData.budget) }}</span>
+          </div>
+          <div v-if="tmdbData.revenue" class="copy-row">
+            <span class="copy-label">Box Office</span>
+            <span>{{ formatMoney(tmdbData.revenue) }}</span>
+          </div>
+          <div v-if="tmdbData.imdbId" class="copy-row">
+            <span class="copy-label">IMDb</span>
+            <a :href="`https://www.imdb.com/title/${tmdbData.imdbId}`" target="_blank" rel="noopener" class="imdb-link">{{ tmdbData.imdbId }}</a>
           </div>
         </section>
 
@@ -111,10 +158,13 @@
         </section>
 
         <section v-if="!tmdbData && !enriching">
-          <p class="not-found" v-if="tmdb.hasApiKey">
-            TMDB data not loaded.
-            <button @click="enrich">Fetch from TMDB</button>
-          </p>
+          <div class="not-found" v-if="tmdb.hasApiKey">
+            <span>TMDB data not loaded.</span>
+            <div class="not-found-actions">
+              <button @click="enrich">Fetch from TMDB</button>
+              <button @click="showOverrideModal = true">Search manually</button>
+            </div>
+          </div>
           <p class="not-found" v-else>
             No TMDB data. Add a TMDB API key in Settings to load it.
           </p>
@@ -122,8 +172,9 @@
         <section v-if="enriching">
           <p class="not-found">Fetching from TMDB...</p>
         </section>
-        <div v-if="tmdb.hasApiKey && tmdbData" class="fix-match-row">
-          <button class="fix-match-btn" @click="showOverrideModal = true">Fix TMDB match</button>
+        <div v-if="tmdb.hasApiKey" class="fix-match-row">
+          <button class="fix-match-btn" @click="showOverrideModal = true">{{ tmdbData ? 'Fix TMDB match' : 'Search TMDB manually' }}</button>
+          <button v-if="sourceCollection" class="fix-match-btn" @click="showCollectionModal = true">Fix collection match</button>
         </div>
       </div>
     </div>
@@ -135,6 +186,37 @@
     :movie="movie"
     @close="showOverrideModal = false"
   />
+
+  <!-- Collection picker modal -->
+  <div v-if="showCollectionModal" class="overlay" @click.self="showCollectionModal = false">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>Fix Collection Match</h2>
+        <button class="close-btn" @click="showCollectionModal = false">×</button>
+      </div>
+      <input
+        v-model="collectionQuery"
+        class="search-input"
+        placeholder="Search TMDB collections…"
+        @input="onCollectionInput"
+      />
+      <div v-if="collectionSearching" class="state-msg-modal">Searching…</div>
+      <div v-else-if="collectionError" class="state-msg-modal error">{{ collectionError }}</div>
+      <div v-else-if="collectionSearched && collectionResults.length === 0" class="state-msg-modal">No results.</div>
+      <ul v-else-if="collectionResults.length" class="results">
+        <li v-for="r in collectionResults" :key="r.id" class="result-item" @click="pickCollection(r)">
+          <img v-if="r.poster_path" :src="`https://image.tmdb.org/t/p/w92${r.poster_path}`" class="result-poster" :alt="r.name" />
+          <div v-else class="result-poster result-poster-empty"></div>
+          <div class="result-info">
+            <div class="result-title">{{ r.name }}</div>
+            <div class="result-meta">ID: {{ r.id }}</div>
+          </div>
+        </li>
+      </ul>
+      <div v-if="collectionApplying" class="state-msg-modal">Applying…</div>
+      <div v-if="collectionApplied" class="state-msg-modal ok">Collection updated ✓</div>
+    </div>
+  </div>
 </template>
 
 <script setup>
@@ -147,6 +229,7 @@ import OverrideModal from '@/components/OverrideModal.vue'
 import CollectionRail from '@/components/CollectionRail.vue'
 import StarRating from '@/components/StarRating.vue'
 import { getReview, saveReviewLocally, syncReviewToSheet } from '@/services/review.js'
+import { searchCollections } from '@/services/tmdb.js'
 
 const route = useRoute()
 const collection = useCollectionStore()
@@ -155,6 +238,55 @@ const tmdb = useTmdbStore()
 const enriching = ref(false)
 const awardsExpanded = ref(false)
 const showOverrideModal = ref(false)
+const showCollectionModal = ref(false)
+const collectionQuery = ref('')
+const collectionResults = ref([])
+const collectionSearching = ref(false)
+const collectionSearched = ref(false)
+const collectionError = ref('')
+const collectionApplying = ref(false)
+const collectionApplied = ref(false)
+let collectionDebounce = null
+
+// The source collection movie (if this film was expanded from a box set)
+const sourceCollection = computed(() =>
+  movie.value?.collectionId
+    ? collection.movies.find(m => m.id === movie.value.collectionId)
+    : null
+)
+
+async function doCollectionSearch() {
+  if (!collectionQuery.value.trim() || !tmdb.apiKey) { collectionResults.value = []; collectionSearched.value = false; return }
+  collectionSearching.value = true
+  collectionError.value = ''
+  try {
+    collectionResults.value = await searchCollections(collectionQuery.value.trim(), tmdb.apiKey)
+    collectionSearched.value = true
+  } catch (e) {
+    collectionError.value = e.message
+  } finally {
+    collectionSearching.value = false
+  }
+}
+
+function onCollectionInput() {
+  clearTimeout(collectionDebounce)
+  collectionDebounce = setTimeout(doCollectionSearch, 300)
+}
+
+async function pickCollection(result) {
+  if (!sourceCollection.value) return
+  collectionApplying.value = true
+  try {
+    await tmdb.applyCollectionOverride(sourceCollection.value.id, result.id)
+    collectionApplied.value = true
+    setTimeout(() => { showCollectionModal.value = false; collectionApplied.value = false }, 800)
+  } catch (e) {
+    collectionError.value = `Failed: ${e.message}`
+  } finally {
+    collectionApplying.value = false
+  }
+}
 
 const localRating = ref(0)
 const localReview = ref('')
@@ -211,6 +343,11 @@ const heroStyle = computed(() =>
     : {}
 )
 
+function formatMoney(amount) {
+  if (!amount) return null
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(amount)
+}
+
 function formatRuntime(minutes) {
   const h = Math.floor(minutes / 60)
   const m = minutes % 60
@@ -235,6 +372,10 @@ watch(() => route.params.id, async (id) => {
     enriching.value = false
   } else if (!movie.value.isCollection && !movie.value.tmdbId && !tmdbData.value) {
     await enrich()
+  }
+  // Patch missing extended fields for already-cached entries
+  if (tmdbData.value && (!tmdbData.value.genres || !tmdbData.value.writers || !tmdbData.value.productionCountries)) {
+    await tmdb.patchDetails(route.params.id)
   }
 }, { immediate: true })
 </script>
@@ -333,21 +474,68 @@ watch(() => route.params.id, async (id) => {
 .awards-group-label { color: var(--text-3); flex-shrink: 0; min-width: 72px; }
 .awards-categories { color: var(--text-2); }
 
-.not-found { color: var(--text-3); font-size: 0.9rem; }
+.tagline-row { padding: 0.1rem 0 0.4rem; }
+.tagline-text { font-style: italic; color: var(--text-2); font-size: 0.95rem; }
+.imdb-link { color: #f5c518; text-decoration: none; font-size: 0.875rem; }
+.imdb-link:hover { text-decoration: underline; }
+
+.not-found { color: var(--text-3); font-size: 0.9rem; display: flex; flex-direction: column; gap: 0.6rem; }
+.not-found-actions { display: flex; gap: 0.75rem; }
 .not-found button {
   background: none; border: none; color: var(--accent);
-  text-decoration: underline; font-size: inherit;
+  text-decoration: underline; font-size: inherit; padding: 0;
 }
 .not-found button:hover { color: var(--accent-hover); }
 
 .state-msg { padding: 3rem; text-align: center; color: var(--text-2); }
 
-.fix-match-row { padding-top: 0.5rem; }
+.fix-match-row { padding-top: 0.5rem; display: flex; gap: 1rem; }
 .fix-match-btn {
   background: none; border: none; padding: 0;
   font-size: 0.75rem; color: var(--text-3); text-decoration: underline;
 }
 .fix-match-btn:hover { color: var(--text-2); }
+
+.overlay {
+  position: fixed; inset: 0; z-index: 200;
+  background: rgba(0,0,0,0.7);
+  display: flex; align-items: center; justify-content: center; padding: 1rem;
+}
+.modal {
+  background: var(--surface); border-radius: var(--radius-lg);
+  width: 100%; max-width: 500px; max-height: 80vh;
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.modal-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 1rem 1.25rem 0.75rem;
+}
+.modal-header h2 { font-size: 1rem; font-weight: 600; }
+.close-btn {
+  background: none; border: none; color: var(--text-2);
+  font-size: 1.4rem; line-height: 1; padding: 0 0.25rem;
+}
+.close-btn:hover { color: var(--text); }
+.search-input {
+  margin: 0 1.25rem 0.75rem;
+  background: var(--surface-2); border: 1px solid var(--text-3);
+  border-radius: var(--radius); color: var(--text);
+  padding: 0.5rem 0.75rem; font-size: 0.9rem; width: calc(100% - 2.5rem);
+}
+.search-input:focus { outline: none; border-color: var(--accent); }
+.state-msg-modal { padding: 1rem 1.25rem; color: var(--text-2); font-size: 0.875rem; }
+.state-msg-modal.error { color: #e05555; }
+.state-msg-modal.ok { color: #2ecc9a; }
+.results { list-style: none; padding: 0; margin: 0; overflow-y: auto; flex: 1; }
+.result-item {
+  display: flex; align-items: center; gap: 0.75rem;
+  padding: 0.6rem 1.25rem; cursor: pointer;
+}
+.result-item:hover { background: var(--surface-2); }
+.result-poster { width: 40px; height: 60px; flex-shrink: 0; border-radius: 3px; object-fit: cover; }
+.result-poster-empty { background: var(--surface-2); border: 1px solid var(--text-3); }
+.result-title { font-size: 0.9rem; color: var(--text); }
+.result-meta { font-size: 0.75rem; color: var(--text-3); margin-top: 2px; }
 
 @media (max-width: 600px) {
   .hero-content { flex-direction: column; align-items: flex-start; padding: 1rem; }

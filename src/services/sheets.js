@@ -5,6 +5,12 @@ const FORMAT_MAP = {
   'blu-rays': 'Blu-ray',
   'blu-ras': 'Blu-ray',
   'dvd': 'DVD',
+  'digital': 'Digital',
+  'digital hd': 'Digital',
+  'hd': 'Digital',
+  'vudu': 'Digital',
+  'itunes': 'Digital',
+  'movies anywhere': 'Digital',
 }
 
 export function normalizeFormat(diskType) {
@@ -38,7 +44,19 @@ export function isCollection(filmName) {
     /\d+\s*[&,]\s*\d+/.test(lower)
 }
 
+const WORD_LIMITS = {
+  'duology': 2, 'double': 2,
+  'trilogy': 3, 'triple': 3,
+  'quadrilogy': 4, 'tetralogy': 4, 'quadruple': 4,
+  'pentalogy': 5, 'quintuple': 5,
+  'hexalogy': 6, 'sextet': 6,
+}
+
 export function collectionPartLimit(filmName) {
+  const lower = filmName.toLowerCase()
+  for (const [word, limit] of Object.entries(WORD_LIMITS)) {
+    if (lower.includes(word)) return limit
+  }
   const match = filmName.match(/\d+(?:\s*[&,]\s*\d+)+/)
   if (!match) return null
   const nums = match[0].split(/[\s&,]+/).map(Number).filter(n => !isNaN(n))

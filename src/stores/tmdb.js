@@ -1,5 +1,25 @@
 import { defineStore } from 'pinia'
-import { enrichMovie, enrichById, searchCollection, fetchCollectionById } from '@/services/tmdb.js'
+
+function parseCsvLine(line) {
+  const fields = []
+  let inQuote = false, cur = ''
+  for (let i = 0; i < line.length; i++) {
+    if (line[i] === '"') { inQuote = !inQuote }
+    else if (line[i] === ',' && !inQuote) { fields.push(cur.trim()); cur = '' }
+    else { cur += line[i] }
+  }
+  fields.push(cur.trim())
+  return fields
+}
+function splitList(val) { return val ? val.split(',').map(s => s.trim()).filter(Boolean) : [] }
+function extractImageUrl(val) {
+  if (!val) return null
+  const m = val.match(/=IMAGE\("([^"]+)"\)/i)
+  return m ? m[1] : (val.startsWith('http') ? val : null)
+}
+function toNum(val) { const n = parseInt(val); return isNaN(n) ? null : n }
+function toFloat(val) { const n = parseFloat(val); return isNaN(n) ? null : n }
+import { enrichMovie, enrichById, searchCollection, searchCollections, fetchCollectionById } from '@/services/tmdb.js'
 
 const API_KEY_STORAGE = 'library_tmdb_key'
 const CACHE_STORAGE = 'library_tmdb_cache'
@@ -9,6 +29,7 @@ function cleanCollectionTitle(title) {
     .replace(/\b(4K|UHD|Blu-?Ray?|DVD|HD)\b/gi, '')
     .replace(/\b\d{4}\s+to\s+\d{4}\b/gi, '')
     .replace(/\b\d+[-\s]?(?:movie|film|part|disc)s?\b/gi, '')
+    .replace(/\bparts?\b/gi, '')
     .replace(/\b\d+(?:st|nd|rd|th)?\s*anniversary\b/gi, '')
     .replace(/\d+(\s*[&,]\s*\d+)+/g, '')
     .replace(/\b(extended|theatrical|limited|complete|ultimate|motion picture)\b/gi, '')
@@ -54,6 +75,8 @@ export const useTmdbStore = defineStore('tmdb', {
         const raw = localStorage.getItem(CACHE_STORAGE)
         if (raw) Object.assign(this.cache, JSON.parse(raw))
       } catch {}
+      // Load full TMDB data from Google Sheet (primary source of truth)
+      await this._loadFromTmdbSheet()
       // Load awards cache
       try {
         const res = await fetch('/awards-cache.json')
@@ -73,6 +96,52 @@ export const useTmdbStore = defineStore('tmdb', {
       try {
         const raw = localStorage.getItem('library_tmdb_collections')
         if (raw) this.collections = JSON.parse(raw)
+      } catch {}
+    },
+
+    async _loadFromTmdbSheet() {
+      try {
+        const res = await fetch('/api/sheet/tmdb-data')
+        if (!res.ok) return
+        const text = await res.text()
+        const lines = text.trim().split(/\r?\n/)
+        if (lines.length < 2) return
+        // Parse header row to get column indices dynamically
+        const headers = parseCsvLine(lines[0])
+        const idx = (name) => headers.indexOf(name)
+        for (const line of lines.slice(1)) {
+          const f = parseCsvLine(line)
+          const slug = f[idx('Slug')]
+          if (!slug) continue
+          const entry = {
+            tmdbId: toNum(f[idx('TMDB_ID')]),
+            year: toNum(f[idx('Year')]),
+            runtime: toNum(f[idx('Runtime')]),
+            voteAverage: toFloat(f[idx('TMDB_Rating')]),
+            voteCount: toNum(f[idx('Vote_Count')]),
+            tagline: f[idx('Tagline')] || null,
+            genres: splitList(f[idx('Genres')]),
+            originalTitle: f[idx('Original_Title')] || null,
+            imdbId: f[idx('IMDB_ID')] || null,
+            budget: toNum(f[idx('Budget')]),
+            revenue: toNum(f[idx('Revenue')]),
+            director: f[idx('Director')] || null,
+            writers: splitList(f[idx('Writers')]),
+            producers: splitList(f[idx('Producers')]),
+            cast: splitList(f[idx('Cast')]),
+            languages: splitList(f[idx('Languages')]),
+            productionCountries: splitList(f[idx('Countries')]),
+            productionCompanies: splitList(f[idx('Studios')]),
+            posterPath: extractImageUrl(f[idx('Poster_URL')]),
+            backdropPath: extractImageUrl(f[idx('Backdrop_URL')]),
+            enrichedAt: f[idx('Enriched_At')] ? new Date(f[idx('Enriched_At')]).getTime() : null,
+          }
+          // Sheet data wins over the static JSON cache but not over localStorage overrides
+          // (localStorage overrides are merged after this call in init)
+          if (!this.cache[slug] || !this.cache[slug].genres) {
+            this.cache[slug] = { ...this.cache[slug], ...entry }
+          }
+        }
       } catch {}
     },
 
@@ -125,22 +194,33 @@ export const useTmdbStore = defineStore('tmdb', {
       this._saveCache()
       this.overrides[movieSlug] = tmdbId
       localStorage.setItem('library_tmdb_overrides', JSON.stringify(this.overrides))
+      // Persist to file + Google Sheet in the background
+      fetch('/api/override', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ movieId: movieSlug, tmdbId })
+      }).catch(e => console.warn('Override sync failed:', e.message))
     },
 
-    async exportOverrides() {
-      let base = {}
-      try {
-        const res = await fetch('/tmdb-overrides.json')
-        if (res.ok) base = await res.json()
-      } catch {}
-      const merged = { ...base, ...this.overrides }
-      const blob = new Blob([JSON.stringify(merged, null, 2)], { type: 'application/json' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = 'tmdb-overrides.json'
-      a.click()
-      URL.revokeObjectURL(url)
+    async applyCollectionOverride(movieSlug, tmdbCollectionId) {
+      if (!this.apiKey) return
+      const data = await fetchCollectionById(tmdbCollectionId, this.apiKey)
+      if (!data) return
+      this.collections[movieSlug] = data
+      for (const part of data.parts) {
+        const virtualId = `${movieSlug}--${part.tmdbId}`
+        if (!this.cache[virtualId] && part.posterPath) {
+          this.cache[virtualId] = { posterPath: part.posterPath, year: part.year }
+        }
+      }
+      localStorage.setItem('library_tmdb_collections', JSON.stringify(this.collections))
+      this._saveCache()
+      // Persist to Google Sheet
+      fetch('/api/override', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ movieId: movieSlug, tmdbId: `collection:${tmdbCollectionId}` })
+      }).catch(e => console.warn('Collection override sync failed:', e.message))
     },
 
     async fetchCollection(movie) {
@@ -176,6 +256,73 @@ export const useTmdbStore = defineStore('tmdb', {
         }
       } catch {
         // silently skip
+      }
+    },
+
+    async patchDetails(movieId) {
+      const entry = this.cache[movieId]
+      if (!entry?.tmdbId || !this.apiKey) return
+      try {
+        const opts = { headers: { Authorization: `Bearer ${this.apiKey}` } }
+        const [details, credits] = await Promise.all([
+          fetch(`https://api.themoviedb.org/3/movie/${entry.tmdbId}`, opts).then(r => r.ok ? r.json() : null),
+          fetch(`https://api.themoviedb.org/3/movie/${entry.tmdbId}/credits`, opts).then(r => r.ok ? r.json() : null)
+        ])
+        if (!details) return
+        entry.languages = details.spoken_languages?.map(l => l.english_name).filter(Boolean) || []
+        entry.productionCompanies = details.production_companies?.map(c => c.name).filter(Boolean) || []
+        entry.productionCountries = details.production_countries?.map(c => c.name).filter(Boolean) || []
+        entry.tagline = details.tagline || null
+        entry.genres = details.genres?.map(g => g.name).filter(Boolean) || []
+        entry.originalTitle = details.original_title !== details.title ? details.original_title : null
+        entry.imdbId = details.imdb_id || null
+        entry.budget = details.budget || null
+        entry.revenue = details.revenue || null
+        entry.voteCount = details.vote_count || null
+        if (credits) {
+          entry.writers = [...new Set(
+            credits.crew
+              .filter(p => ['Screenplay', 'Story', 'Writer'].includes(p.job))
+              .map(p => p.name)
+          )]
+          entry.producers = [...new Set(
+            credits.crew.filter(p => p.job === 'Producer').map(p => p.name)
+          )]
+        }
+        this._saveCache()
+        this._syncTmdbDataToSheet(movieId)
+      } catch {}
+    },
+
+    _syncTmdbDataToSheet(movieId) {
+      const entry = this.cache[movieId]
+      if (!entry) return
+      fetch('/api/tmdb-data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ movieId, title: entry.title || movieId, data: entry })
+      }).catch(e => console.warn('TMDB data sync failed:', e.message))
+    },
+
+    async syncAllToSheet() {
+      if (localStorage.getItem('library_sheet_synced')) return
+      const ids = Object.keys(this.cache).filter(id => this.cache[id]?.tmdbId)
+      for (const id of ids) {
+        this._syncTmdbDataToSheet(id)
+        await new Promise(r => setTimeout(r, 300))
+      }
+      localStorage.setItem('library_sheet_synced', '1')
+    },
+
+    async patchAllMissing() {
+      if (!this.apiKey) return
+      const ids = Object.keys(this.cache).filter(id => {
+        const e = this.cache[id]
+        return e?.tmdbId && (!e.productionCompanies || !e.genres || !e.writers)
+      })
+      for (const id of ids) {
+        await this.patchDetails(id)
+        await new Promise(r => setTimeout(r, 250))
       }
     },
 

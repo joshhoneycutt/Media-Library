@@ -19,10 +19,23 @@ export default defineConfig(({ mode }) => {
           target: 'http://localhost:3334',
           changeOrigin: true,
         },
+        '/api/override': {
+          target: 'http://localhost:3334',
+          changeOrigin: true,
+        },
+        '/api/tmdb-data': {
+          target: 'http://localhost:3334',
+          changeOrigin: true,
+        },
         '/api/sheet/dvd': {
           target: 'https://docs.google.com',
           changeOrigin: true,
           rewrite: () => `/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&sheet=DVD`
+        },
+        '/api/sheet/tmdb-data': {
+          target: 'https://docs.google.com',
+          changeOrigin: true,
+          rewrite: () => `/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&sheet=TMDB+Data`
         },
         '/api/sheet': {
           target: 'https://docs.google.com',

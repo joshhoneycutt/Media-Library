@@ -25,6 +25,14 @@ export async function enrichMovie(title, apiKey) {
 
   const director = credits.crew.find(p => p.job === 'Director')?.name || 'Unknown'
   const cast = credits.cast.slice(0, 5).map(p => p.name)
+  const writers = [...new Set(
+    credits.crew
+      .filter(p => ['Screenplay', 'Story', 'Writer'].includes(p.job))
+      .map(p => p.name)
+  )]
+  const producers = [...new Set(
+    credits.crew.filter(p => p.job === 'Producer').map(p => p.name)
+  )]
 
   return {
     tmdbId: match.id,
@@ -33,8 +41,20 @@ export async function enrichMovie(title, apiKey) {
     year: match.release_date ? parseInt(match.release_date.slice(0, 4)) : null,
     runtime: details.runtime || null,
     voteAverage: match.vote_average || null,
+    voteCount: details.vote_count || null,
     overview: match.overview || null,
+    tagline: details.tagline || null,
+    genres: details.genres?.map(g => g.name).filter(Boolean) || [],
+    originalTitle: details.original_title !== match.title ? details.original_title : null,
+    imdbId: details.imdb_id || null,
+    budget: details.budget || null,
+    revenue: details.revenue || null,
+    languages: details.spoken_languages?.map(l => l.english_name).filter(Boolean) || [],
+    productionCompanies: details.production_companies?.map(c => c.name).filter(Boolean) || [],
+    productionCountries: details.production_countries?.map(c => c.name).filter(Boolean) || [],
     director,
+    writers,
+    producers,
     cast,
     enrichedAt: Date.now()
   }
@@ -56,6 +76,15 @@ export async function enrichById(tmdbId, apiKey) {
   ])
   const director = credits.crew.find(p => p.job === 'Director')?.name || 'Unknown'
   const cast = credits.cast.slice(0, 5).map(p => p.name)
+  const writers = [...new Set(
+    credits.crew
+      .filter(p => ['Screenplay', 'Story', 'Writer'].includes(p.job))
+      .map(p => p.name)
+  )]
+  const producers = [...new Set(
+    credits.crew.filter(p => p.job === 'Producer').map(p => p.name)
+  )]
+
   return {
     tmdbId,
     posterPath: details.poster_path ? `${IMG_BASE}/w500${details.poster_path}` : null,
@@ -63,11 +92,31 @@ export async function enrichById(tmdbId, apiKey) {
     year: details.release_date ? parseInt(details.release_date.slice(0, 4)) : null,
     runtime: details.runtime || null,
     voteAverage: details.vote_average || null,
+    voteCount: details.vote_count || null,
     overview: details.overview || null,
+    tagline: details.tagline || null,
+    genres: details.genres?.map(g => g.name).filter(Boolean) || [],
+    originalTitle: details.original_title !== details.title ? details.original_title : null,
+    imdbId: details.imdb_id || null,
+    budget: details.budget || null,
+    revenue: details.revenue || null,
+    languages: details.spoken_languages?.map(l => l.english_name).filter(Boolean) || [],
+    productionCompanies: details.production_companies?.map(c => c.name).filter(Boolean) || [],
+    productionCountries: details.production_countries?.map(c => c.name).filter(Boolean) || [],
     director,
+    writers,
+    producers,
     cast,
     enrichedAt: Date.now()
   }
+}
+
+export async function searchCollections(title, apiKey) {
+  const url = `${BASE}/search/collection?query=${encodeURIComponent(title)}&page=1`
+  const res = await fetch(url, { headers: authHeaders(apiKey) })
+  if (!res.ok) throw new Error(`TMDB collection search failed: ${res.status}`)
+  const data = await res.json()
+  return (data.results || []).slice(0, 8)
 }
 
 export async function searchCollection(title, apiKey) {

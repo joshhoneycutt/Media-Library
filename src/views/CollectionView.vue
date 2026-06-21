@@ -4,6 +4,7 @@
       <input
         v-model="searchQuery"
         @input="collection.setFilter('search', searchQuery)"
+        @search="collection.setFilter('search', searchQuery)"
         type="search"
         placeholder="Search your collection..."
         class="search-input"
@@ -78,7 +79,20 @@ const displayMovies = computed(() => {
 
   if (filters.search) {
     const q = filters.search.toLowerCase()
-    movies = movies.filter(m => m.title.toLowerCase().includes(q))
+    movies = movies.filter(m => {
+      if (m.title.toLowerCase().includes(q)) return true
+      const td = tmdb.cache[m.id]
+      if (!td) return false
+      if (td.director?.toLowerCase().includes(q)) return true
+      if (td.cast?.some(c => c.toLowerCase().includes(q))) return true
+      if (td.overview?.toLowerCase().includes(q)) return true
+      if (td.languages?.some(l => l.toLowerCase().includes(q))) return true
+      if (td.productionCompanies?.some(c => c.toLowerCase().includes(q))) return true
+      if (td.productionCountries?.some(c => c.toLowerCase().includes(q))) return true
+      if (td.genres?.some(g => g.toLowerCase().includes(q))) return true
+      if (td.writers?.some(w => w.toLowerCase().includes(q))) return true
+      return false
+    })
   }
 
   if (filters.genre) {
@@ -148,7 +162,7 @@ const displayMovies = computed(() => {
 <style scoped>
 .collection { padding-bottom: 3rem; }
 
-.search-bar { padding: 1rem 1.5rem 0; }
+.search-bar { padding: 1rem 1.5rem; }
 .search-input {
   width: 100%; max-width: 480px;
   padding: 0.65rem 1rem;
