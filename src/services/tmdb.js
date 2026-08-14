@@ -111,6 +111,67 @@ export async function enrichById(tmdbId, apiKey) {
   }
 }
 
+export async function searchTvShows(title, apiKey) {
+  const url = `${BASE}/search/tv?query=${encodeURIComponent(title)}&page=1`
+  const res = await fetch(url, { headers: authHeaders(apiKey) })
+  if (!res.ok) throw new Error(`TMDB TV search failed: ${res.status}`)
+  const data = await res.json()
+  return (data.results || []).slice(0, 8)
+}
+
+export async function enrichTvById(tvId, apiKey) {
+  const opts = { headers: authHeaders(apiKey) }
+  const [details, credits] = await Promise.all([
+    fetch(`${BASE}/tv/${tvId}`, opts).then(r => {
+      if (!r.ok) throw new Error(`TMDB ${r.status}`)
+      return r.json()
+    }),
+    fetch(`${BASE}/tv/${tvId}/aggregate_credits`, opts).then(r => (r.ok ? r.json() : null))
+  ])
+
+  return {
+    tmdbId: details.id,
+    mediaType: 'tv',
+    posterPath: details.poster_path ? `${IMG_BASE}/w500${details.poster_path}` : null,
+    backdropPath: details.backdrop_path ? `${IMG_BASE}/w1280${details.backdrop_path}` : null,
+    year: details.first_air_date ? parseInt(details.first_air_date.slice(0, 4)) : null,
+    lastAirYear: details.last_air_date ? parseInt(details.last_air_date.slice(0, 4)) : null,
+    status: details.status || null,
+    numberOfSeasons: details.number_of_seasons || null,
+    numberOfEpisodes: details.number_of_episodes || null,
+    runtime: details.episode_run_time?.[0] || null,
+    voteAverage: details.vote_average || null,
+    voteCount: details.vote_count || null,
+    overview: details.overview || null,
+    tagline: details.tagline || null,
+    genres: details.genres?.map(g => g.name).filter(Boolean) || [],
+    originalTitle: details.original_name !== details.name ? details.original_name : null,
+    networks: details.networks?.map(n => n.name).filter(Boolean) || [],
+    createdBy: details.created_by?.map(c => c.name).filter(Boolean) || [],
+    cast: (credits?.cast || []).slice(0, 5).map(p => p.name),
+    languages: details.spoken_languages?.map(l => l.english_name).filter(Boolean) || [],
+    productionCompanies: details.production_companies?.map(c => c.name).filter(Boolean) || [],
+    productionCountries: details.production_countries?.map(c => c.name).filter(Boolean) || [],
+    seasons: (details.seasons || [])
+      .filter(s => s.season_number > 0)
+      .map(s => ({
+        seasonNumber: s.season_number,
+        name: s.name,
+        posterPath: s.poster_path ? `${IMG_BASE}/w500${s.poster_path}` : null,
+        year: s.air_date ? parseInt(s.air_date.slice(0, 4)) : null,
+        episodeCount: s.episode_count || null,
+        overview: s.overview || null
+      })),
+    enrichedAt: Date.now()
+  }
+}
+
+export async function enrichTvShow(title, apiKey) {
+  const results = await searchTvShows(title, apiKey)
+  if (!results.length) return null
+  return enrichTvById(results[0].id, apiKey)
+}
+
 export async function searchCollections(title, apiKey) {
   const url = `${BASE}/search/collection?query=${encodeURIComponent(title)}&page=1`
   const res = await fetch(url, { headers: authHeaders(apiKey) })

@@ -19,10 +19,20 @@ function extractImageUrl(val) {
 }
 function toNum(val) { const n = parseInt(val); return isNaN(n) ? null : n }
 function toFloat(val) { const n = parseFloat(val); return isNaN(n) ? null : n }
-import { enrichMovie, enrichById, searchCollection, searchCollections, fetchCollectionById } from '@/services/tmdb.js'
+import {
+  enrichMovie,
+  enrichById,
+  searchCollection,
+  searchCollections,
+  fetchCollectionById,
+  enrichTvShow,
+  enrichTvById
+} from '@/services/tmdb.js'
 
 const API_KEY_STORAGE = 'library_tmdb_key'
 const CACHE_STORAGE = 'library_tmdb_cache'
+const TV_CACHE_STORAGE = 'library_tmdb_tv_cache'
+const TV_OVERRIDES_STORAGE = 'library_tmdb_tv_overrides'
 
 function cleanCollectionTitle(title) {
   const cleaned = title
@@ -46,6 +56,8 @@ export const useTmdbStore = defineStore('tmdb', {
   state: () => ({
     apiKey: localStorage.getItem(API_KEY_STORAGE) || '',
     cache: {},
+    tvCache: {},
+    tvOverrides: {},
     awardsCache: {},
     overrides: {},
     collections: {},
@@ -57,6 +69,7 @@ export const useTmdbStore = defineStore('tmdb', {
   getters: {
     hasApiKey: (state) => !!state.apiKey,
     getMovieData: (state) => (movieId) => state.cache[movieId] || null,
+    getShowData: (state) => (showId) => state.tvCache[showId] || null,
     getOscarData: (state) => (movieId) => state.awardsCache[movieId] || null,
     hasOverrides: (state) => Object.keys(state.overrides).length > 0,
     getCollectionParts: (state) => (slug) => state.collections[slug]?.parts ?? [],
@@ -96,6 +109,15 @@ export const useTmdbStore = defineStore('tmdb', {
       try {
         const raw = localStorage.getItem('library_tmdb_collections')
         if (raw) this.collections = JSON.parse(raw)
+      } catch {}
+      // Load TV cache + overrides
+      try {
+        const raw = localStorage.getItem(TV_CACHE_STORAGE)
+        if (raw) this.tvCache = JSON.parse(raw)
+      } catch {}
+      try {
+        const raw = localStorage.getItem(TV_OVERRIDES_STORAGE)
+        if (raw) this.tvOverrides = JSON.parse(raw)
       } catch {}
     },
 
@@ -152,6 +174,57 @@ export const useTmdbStore = defineStore('tmdb', {
 
     _saveCache() {
       localStorage.setItem(CACHE_STORAGE, JSON.stringify(this.cache))
+    },
+
+    _saveTvCache() {
+      localStorage.setItem(TV_CACHE_STORAGE, JSON.stringify(this.tvCache))
+    },
+
+    async fetchForShow(show) {
+      if (this.tvCache[show.id] || !this.apiKey) return
+      try {
+        const overrideId = this.tvOverrides[show.id]
+        const data = overrideId
+          ? await enrichTvById(overrideId, this.apiKey)
+          : await enrichTvShow(show.title, this.apiKey)
+        if (data) {
+          this.tvCache[show.id] = data
+          this._saveTvCache()
+        }
+      } catch {
+        // silently skip failed enrichments
+      }
+    },
+
+    async enrichAllShows(shows) {
+      const queue = shows.filter(s => !this.tvCache[s.id])
+      this.enriching = true
+      this._cancelEnrich = false
+      this.enrichProgress = { current: 0, total: queue.length }
+
+      for (const show of queue) {
+        if (this._cancelEnrich) break
+        await this.fetchForShow(show)
+        this.enrichProgress.current++
+        await new Promise(r => setTimeout(r, 300))
+      }
+
+      this.enriching = false
+    },
+
+    async applyTvOverride(showId, tvId) {
+      if (!this.apiKey) return
+      const data = await enrichTvById(tvId, this.apiKey)
+      if (!data) return
+      this.tvCache[showId] = data
+      this._saveTvCache()
+      this.tvOverrides[showId] = tvId
+      localStorage.setItem(TV_OVERRIDES_STORAGE, JSON.stringify(this.tvOverrides))
+    },
+
+    clearTvCache() {
+      this.tvCache = {}
+      localStorage.removeItem(TV_CACHE_STORAGE)
     },
 
     async fetchForMovie(movie) {
