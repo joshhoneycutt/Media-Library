@@ -37,6 +37,17 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           rewrite: () => `/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&sheet=TMDB+Data`
         },
+        // Declared before /api/sheet/tv so the longer prefix wins.
+        '/api/sheet/tv-dvd': {
+          target: 'https://docs.google.com',
+          changeOrigin: true,
+          rewrite: () => `/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent('Television DVD')}`
+        },
+        '/api/sheet/tv': {
+          target: 'https://docs.google.com',
+          changeOrigin: true,
+          rewrite: () => `/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent('Television Bluray + 4K')}`
+        },
         '/api/sheet': {
           target: 'https://docs.google.com',
           changeOrigin: true,

@@ -3,8 +3,8 @@
     <nav class="nav">
       <router-link to="/" class="nav-logo">THE LIBRARY</router-link>
       <div class="nav-tabs">
-        <router-link to="/" class="nav-tab active-tab">Movies</router-link>
-        <span class="nav-tab disabled">TV Shows</span>
+        <router-link to="/" class="nav-tab" :class="{ 'active-tab': $route.name === 'collection' || $route.name === 'movie' }">Movies</router-link>
+        <router-link to="/tv" class="nav-tab" :class="{ 'active-tab': $route.name === 'shows' || $route.name === 'show' }">TV Shows</router-link>
         <span class="nav-tab disabled">Books</span>
         <span class="nav-tab disabled">Games</span>
         <span class="nav-tab disabled">Music</span>
@@ -72,9 +72,11 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useCollectionStore } from '@/stores/collection.js'
+import { useShowsStore } from '@/stores/shows.js'
 import { useTmdbStore } from '@/stores/tmdb.js'
 
 const collection = useCollectionStore()
+const shows = useShowsStore()
 const tmdb = useTmdbStore()
 const showSettings = ref(false)
 const newKey = ref('')
@@ -94,6 +96,7 @@ onMounted(async () => {
   document.documentElement.setAttribute('data-theme', theme.value)
   await tmdb.init()
   await collection.loadCollection()
+  await shows.loadShows()
   // Backfill missing fields for any un-enriched entries, then sync everything to sheet
   await tmdb.patchAllMissing()
   tmdb.syncAllToSheet()
@@ -109,8 +112,9 @@ const unenrichedCount = computed(() =>
 )
 
 async function sync() {
-  await collection.syncFromSheet()
+  await Promise.all([collection.syncFromSheet(), shows.syncFromSheet()])
   await tmdb.enrichAll(collection.movies)
+  await tmdb.enrichAllShows(shows.shows)
 }
 function updateKey() { if (newKey.value.trim()) { tmdb.setApiKey(newKey.value); newKey.value = '' } }
 function clearTmdbCache() { if (confirm('Clear all cached TMDB data?')) tmdb.clearCache() }

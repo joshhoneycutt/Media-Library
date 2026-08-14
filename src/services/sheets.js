@@ -63,7 +63,7 @@ export function collectionPartLimit(filmName) {
   return Math.max(...nums)
 }
 
-function parseFields(line) {
+export function parseFields(line) {
   const fields = []
   let inQuote = false
   let current = ''

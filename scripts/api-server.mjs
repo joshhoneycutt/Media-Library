@@ -3,7 +3,6 @@ import { readFileSync, writeFileSync, existsSync } from 'fs'
 import { resolve, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import http from 'http'
-import { Readable } from 'stream'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = resolve(__dirname, '..')
@@ -123,12 +122,14 @@ async function writeReviewToSheet(sheets, sheetTitle, movieId, rating, review) {
     batchData.push({ range: `'${sheetTitle}'!${colLetter(reviewCol)}1`, values: [['Review']] })
   }
 
-  // Find the movie row
+  // Find the row. Movies key off the Film Name column; TV seasons key off the
+  // Category Name column ("<Show> Season 1"), which is column A on both TV tabs.
   let found = false
   for (let i = 1; i < rows.length; i++) {
-    const filmName = (rows[i][1] || '').replace(/^"|"$/g, '').trim()
-    if (!filmName) continue
-    if (titleToSlug(filmName) === movieId) {
+    const names = [rows[i][1], rows[i][0]]
+      .map(v => (v || '').replace(/^"|"$/g, '').trim())
+      .filter(Boolean)
+    if (names.some(name => titleToSlug(name) === movieId)) {
       const rowNum = i + 1
       batchData.push({ range: `'${sheetTitle}'!${colLetter(ratingCol)}${rowNum}`, values: [[rating]] })
       batchData.push({ range: `'${sheetTitle}'!${colLetter(reviewCol)}${rowNum}`, values: [[review]] })
@@ -292,7 +293,12 @@ async function handleReview(body) {
   const sheets = google.sheets({ version: 'v4', auth })
 
   const meta = await sheets.spreadsheets.get({ spreadsheetId: SHEET_ID })
-  const allSheets = meta.data.sheets.map(s => ({ id: s.properties.sheetId, title: s.properties.title }))
+  // Skip the tabs this app owns — their column A holds slugs, which would
+  // otherwise match and get Rating/Review columns appended to them.
+  const managed = new Set([OVERRIDES_SHEET, TMDB_DATA_SHEET])
+  const allSheets = meta.data.sheets
+    .map(s => ({ id: s.properties.sheetId, title: s.properties.title }))
+    .filter(s => !managed.has(s.title))
 
   let found = false
   for (const sheet of allSheets) {

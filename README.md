@@ -103,7 +103,59 @@ Holds your DVD collection. Same column structure as the main tab — the app ign
 
 ---
 
-#### Tab 3: TMDB Overrides (auto-created, named `TMDB Overrides`)
+#### Tab 3: Television Bluray + 4K (named `Television Bluray + 4K`)
+
+One row per season owned. Seasons are grouped into a single show in the app, so
+`Northwind Season 1` … `Northwind Season 8` render as one card.
+
+| Column | Header | Description |
+|---|---|---|
+| A | Category Name | Grouping/sort key — this is what the app parses for the show name and season number (e.g. `Northwind Season 3`) |
+| B | Show Name | Display title as printed on the box (e.g. `Northwind The Third Season`) |
+| C | Genere | Primary genre (note: header is spelled this way in the sheet) |
+| D | Sub Genere | Secondary genre (optional) |
+| E | Disk Type | `4K` or `Blu-Ray` |
+| F | Notes | Edition notes (e.g. `Steelbook`) |
+| G | Rating | Star rating for this season (written back by the app) |
+| H | Review | Text review for this season (written back by the app) |
+
+Recognised season markers in **Category Name** (and as a fallback, Show Name):
+
+| Pattern | Example | Meaning |
+|---|---|---|
+| `Season N` | `Season 3` | single season |
+| `Season <word>` | `Season Three` | single season |
+| `The [Complete] <Ordinal> Season` | `The Complete First Season` | single season |
+| `Season N-M` | `Season 1-3` | counts as every season in the range |
+| `Complete` / `Entire` / `Full Series` | `The Complete Series` | covers **every** season — its format is applied to each individual season too |
+| `The Final Season` | `The Final Season` | unnumbered final season |
+| *(no marker)* | `Northwind` | treated as the whole show |
+
+A trailing sort-order index is ignored, so `Northwind 9 Season 9 Offshoot Season 1`
+resolves to the show `Northwind 9 Offshoot`, season 1 — the right-most marker wins.
+
+---
+
+#### Tab 4: Television DVD (named `Television DVD`)
+
+Same as above, **but with no Notes column** — Rating and Review shift left by one.
+
+| Column | Header | Description |
+|---|---|---|
+| A | Category Name | Grouping/sort key |
+| B | Show Name | Display title |
+| C | Genere | Primary genre |
+| D | Sub Genere | Secondary genre (optional) |
+| E | Disk Type | `DVD` |
+| F | Rating | Star rating (written back by the app) |
+| G | Review | Text review (written back by the app) |
+
+The app locates Rating/Review by header name rather than fixed position, so both
+TV layouts work without configuration.
+
+---
+
+#### Tab 5: TMDB Overrides (auto-created, named `TMDB Overrides`)
 
 Created automatically by the app the first time you fix a TMDB match. Maps movie slugs to TMDB IDs.
 
@@ -114,7 +166,7 @@ Created automatically by the app the first time you fix a TMDB match. Maps movie
 
 ---
 
-#### Tab 4: TMDB Data (auto-created, named `TMDB Data`)
+#### Tab 6: TMDB Data (auto-created, named `TMDB Data`)
 
 Created automatically by the app. Stores all TMDB-enriched metadata so the app can load it from the sheet instead of hitting the TMDB API on every visit.
 
@@ -152,7 +204,8 @@ Get a free API key at [themoviedb.org](https://www.themoviedb.org/settings/api) 
 
 ## How data flows
 
-- **Reading collection**: Vite proxies `/api/sheet` → Google Sheets public CSV → parsed by the app
+- **Reading movies**: Vite proxies `/api/sheet` and `/api/sheet/dvd` → Google Sheets public CSV → parsed by the app
+- **Reading TV**: `/api/sheet/tv` and `/api/sheet/tv-dvd` → the two Television tabs → seasons grouped into shows
 - **Reading TMDB data**: Loaded from the `TMDB Data` sheet tab on startup; TMDB API is only called for movies not yet in the sheet
 - **Writing ratings/reviews**: Saved to localStorage immediately, then synced to the sheet via the API server
 - **Writing TMDB data**: Enriched data is written to the `TMDB Data` sheet tab automatically after each fetch

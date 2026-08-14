@@ -16,6 +16,12 @@ dist-ssr
 google-credentials.json
 google-token.json
 
+# Personal collection data (do not commit)
+public/tmdb-cache.json
+public/awards-cache.json
+public/tmdb-overrides.json
+public/shows-cache.json
+
 # Superpowers local tool state
 .superpowers/
 
